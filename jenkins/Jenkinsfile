@@ -2,15 +2,15 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
+        stage('Unit Tests - Backend') {
             steps {
-                git 'https://github.com/EduardoFernandezMunoz/bug-tracker.git'
-            }
-        }
-
-        stage('Run Backend Tests') {
-            steps {
-                bat 'go test ./... -v'
+                // Change the path if your project is somewhere else
+                dir('bugtracker-backend') {
+                    // Check Go version first
+                    bat 'go version'
+                    // Run tests
+                    bat 'go test -v ./...'
+                }
             }
         }
     }
