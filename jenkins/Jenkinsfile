@@ -1,31 +1,73 @@
 pipeline {
     agent any
 
-    tools {
-        go 'Go'
-        nodejs 'NodeJS_LTS'
+    stages {
+        stage('Execute Unit Tests') {
+            parallel {
+
+                stage('Unit Tests - Backend') {
+                    agent {
+                        docker {
+                            image 'snakee/golang-junit:1.21'
+                            reuseNode true
+                        }
+                    }
+                    steps {
+                        dir('bugtracker-backend') {
+                            sh 'go test -v ./... 2>&1 | go-junit-report > test-results.xml'
+                            sh 'go test -coverprofile=coverage.out -covermode=atomic ./...'
+                            sh 'go tool cover -html=coverage.out -o coverage.html'
+                            sh 'mkdir -p reports'
+                            sh 'mv coverage.html reports/'
+                        }
+                    }
+                    post {
+                        always {
+                            junit 'bugtracker-backend/test-results.xml'
+                            publishHTML([
+                                reportDir: 'bugtracker-backend/reports',
+                                reportFiles: 'coverage.html',
+                                reportName: 'Backend Coverage Report',
+                                keepAll: true
+                            ])
+                        }
+                    }
+                }
+
+                stage('Unit Tests - Frontend') {
+                    agent {
+                        docker {
+                            image 'node:20-alpine'
+                            reuseNode true
+                        }
+                    }
+                    steps {
+                        dir('bugtracker-frontend') {
+                            sh 'npm ci'
+                            sh 'npm test'
+                            sh 'mkdir -p reports'
+                            sh 'mv coverage reports/'
+                        }
+                    }
+                    post {
+                        always {
+                            publishHTML([
+                                reportDir: 'bugtracker-frontend/reports',
+                                reportFiles: 'coverage/index.html',
+                                reportName: 'Frontend Coverage Report',
+                                keepAll: true
+                            ])
+                        }
+                    }
+                }
+
+            } // end parallel
+        }
     }
 
-    stages {
-        stage('Unit Tests - Backend') {
-            steps {
-                dir('bugtracker-backend') {
-                    // Print Go version
-                    bat 'go version'
-                    // Run Go tests
-                    bat 'go test ./... -v'
-                }
-            }
-        }
-
-        stage('Unit Tests - Frontend') {
-            steps {
-                dir('bugtracker-frontend') {
-                    bat 'node -v'
-                    bat 'npm ci'
-                    bat 'npm test'
-                }
-            }
+    post {
+        always {
+            cleanWs()
         }
     }
 }
