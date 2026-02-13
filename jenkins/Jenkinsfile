@@ -2,7 +2,8 @@ pipeline {
     agent any
 
     tools {
-        go 'Go' //
+        go 'Go'
+        nodejs 'NodeJS_LTS'
     }
 
     stages {
@@ -11,6 +12,16 @@ pipeline {
                 dir('bugtracker-backend') {
                     bat 'go version'
                     bat 'go test -v ./...'
+                }
+            }
+        }
+
+        stage('Unit Tests - Frontend') {
+            steps {
+                dir('bugtracker-frontend') {
+                    bat 'node -v'
+                    bat 'npm ci'
+                    bat 'npm test'
                 }
             }
         }
