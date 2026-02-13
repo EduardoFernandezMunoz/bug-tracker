@@ -2,11 +2,18 @@ pipeline {
     agent any
 
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Unit Tests - Backend') {
             agent {
                 docker {
                     image 'golang:1.21'
                     reuseNode true
+                    // Map Windows Jenkins workspace into Linux container
                     args '-v /c/ProgramData/Jenkins/.jenkins/workspace/Bugtracker:/workspace -w /workspace'
                 }
             }
