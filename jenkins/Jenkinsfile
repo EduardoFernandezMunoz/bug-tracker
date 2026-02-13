@@ -3,13 +3,19 @@ pipeline {
 
     stages {
         stage('Unit Tests - Backend') {
+            agent {
+                docker {
+                    // Official Go image
+                    image 'golang:1.21'
+                    // Keep Jenkins workspace inside the container
+                    reuseNode true
+                }
+            }
             steps {
-                script {
-                    // Mount the current workspace into the Docker container
-                    docker.image('snakee/golang-junit:1.21').inside("-v ${pwd()}:/workspace") {
-                        // Run Go tests inside the container
-                        sh 'cd /workspace/bugtracker-backend && go test -v ./...'
-                    }
+                // Change to the backend directory
+                dir('bugtracker-backend') {
+                    // Run tests inside the container
+                    sh 'go test -v ./...'
                 }
             }
         }
