@@ -1,8 +1,8 @@
 pipeline {
     agent any
     tools {
-        go 'Go 1.21'       // Ajusta al nombre que pusiste en Jenkins Global Tool Config
-        nodejs 'NodeJS 20' // Ajusta al nombre que pusiste en Jenkins Global Tool Config
+        go 'Go'           // nombre exacto en Jenkins
+        nodejs 'NodeJS_LTS' // nombre exacto en Jenkins
     }
 
     stages {
@@ -12,10 +12,10 @@ pipeline {
                 stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
-                            // Verificar que Go funciona
+                            // Verifica que Go funciona
                             bat 'go version'
 
-                            // Ejecutar tests y generar coverage
+                            // Ejecuta tests y genera coverage
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o coverage.html'
@@ -27,7 +27,7 @@ pipeline {
                     }
                     post {
                         always {
-                            // Publicar reporte HTML del backend
+                            // Publica reporte HTML del backend
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
@@ -43,11 +43,11 @@ pipeline {
                 stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
-                            // Verificar que Node funciona
+                            // Verifica que Node y npm funcionan
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Instalar dependencias y ejecutar tests
+                            // Instala dependencias y ejecuta tests
                             bat 'npm ci'
                             bat 'npm test'
 
@@ -58,7 +58,7 @@ pipeline {
                     }
                     post {
                         always {
-                            // Publicar reporte HTML del frontend
+                            // Publica reporte HTML del frontend
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'coverage/index.html',
