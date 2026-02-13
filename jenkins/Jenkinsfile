@@ -4,26 +4,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git 'https://github.com/EduardoFernandezMunoz/bug-tracker.git'
             }
         }
 
-        stage('Unit Tests - Backend') {
+        stage('Run Backend Tests') {
             steps {
-                script {
-                    // Convert Windows path to Linux style for Docker
-                    def workspaceLinux = '/workspace'
-
-                    docker.image('golang:1.21').inside("-v ${env.WORKSPACE.replaceAll('\\\\','/')}:${workspaceLinux} -w ${workspaceLinux}") {
-                        sh '''
-                        echo "Running Go tests inside Docker container..."
-                        go version
-                        go test -v ./...
-                        '''
-                    }
-                }
+                bat 'go test ./... -v'
             }
         }
     }
 }
-
