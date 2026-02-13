@@ -14,6 +14,7 @@ pipeline {
                     }
                     steps {
                         dir('bugtracker-backend') {
+                            // Ejecuta tests en contenedor Linux
                             sh 'go test -v ./... 2>&1 | go-junit-report > test-results.xml'
                             sh 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             sh 'go tool cover -html=coverage.out -o coverage.html'
@@ -28,7 +29,9 @@ pipeline {
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
-                                keepAll: true
+                                keepAll: true,
+                                alwaysLinkToLastBuild: true,
+                                allowMissing: false
                             ])
                         }
                     }
@@ -43,6 +46,7 @@ pipeline {
                     }
                     steps {
                         dir('bugtracker-frontend') {
+                            // Comandos en contenedor Linux
                             sh 'npm ci'
                             sh 'npm test'
                             sh 'mkdir -p reports'
@@ -55,7 +59,9 @@ pipeline {
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'coverage/index.html',
                                 reportName: 'Frontend Coverage Report',
-                                keepAll: true
+                                keepAll: true,
+                                alwaysLinkToLastBuild: true,
+                                allowMissing: false
                             ])
                         }
                     }
