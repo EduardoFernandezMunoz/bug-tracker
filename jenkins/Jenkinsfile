@@ -1,5 +1,9 @@
 pipeline {
     agent any
+    tools {
+        go 'Go 1.21'       // Ajusta al nombre que pusiste en Jenkins Global Tool Config
+        nodejs 'NodeJS 20' // Ajusta al nombre que pusiste en Jenkins Global Tool Config
+    }
 
     stages {
         stage('Execute Unit Tests') {
@@ -8,19 +12,22 @@ pipeline {
                 stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
-                            // Ejecuta tests de Go en Windows
+                            // Verificar que Go funciona
+                            bat 'go version'
+
+                            // Ejecutar tests y generar coverage
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o coverage.html'
 
-                            // Crear carpeta de reportes si no existe
+                            // Crear carpeta de reportes y mover coverage.html
                             bat 'if not exist reports mkdir reports'
                             bat 'move /Y coverage.html reports\\'
                         }
                     }
                     post {
                         always {
-                            // Publicar reporte HTML
+                            // Publicar reporte HTML del backend
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
@@ -36,18 +43,22 @@ pipeline {
                 stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
-                            // Instala dependencias y ejecuta tests de Node.js en Windows
+                            // Verificar que Node funciona
+                            bat 'node -v'
+                            bat 'npm -v'
+
+                            // Instalar dependencias y ejecutar tests
                             bat 'npm ci'
                             bat 'npm test'
 
-                            // Crear carpeta de reportes si no existe
+                            // Crear carpeta de reportes y mover coverage
                             bat 'if not exist reports mkdir reports'
                             bat 'move /Y coverage reports\\'
                         }
                     }
                     post {
                         always {
-                            // Publicar reporte HTML
+                            // Publicar reporte HTML del frontend
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'coverage/index.html',
