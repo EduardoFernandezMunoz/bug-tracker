@@ -9,17 +9,14 @@ pipeline {
         }
 
         stage('Unit Tests - Backend') {
-            agent {
-                docker {
-                    image 'golang:1.21'
-                    reuseNode true
-                    // Map Windows Jenkins workspace into Linux container
-                    args '-v /c/ProgramData/Jenkins/.jenkins/workspace/Bugtracker:/workspace -w /workspace'
-                }
-            }
             steps {
-                dir('bugtracker-backend') {
-                    sh 'go test -v ./...'
+                script {
+                    // Run Go tests inside Linux container
+                    docker.image('golang:1.21').inside(
+                        '-v /c/ProgramData/Jenkins/.jenkins/workspace/Bugtracker:/workspace -w /workspace'
+                    ) {
+                        sh 'go test -v ./...'
+                    }
                 }
             }
         }
