@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        WORKSPACE_LINUX = "/workspace"
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -15,12 +11,12 @@ pipeline {
         stage('Unit Tests - Backend') {
             steps {
                 script {
-                    // Run Go unit tests inside Linux container
-                    docker.image('golang:1.21').inside(
-                        "-v /c/ProgramData/Jenkins/.jenkins/workspace/Bugtracker:${WORKSPACE_LINUX} -w ${WORKSPACE_LINUX}"
-                    ) {
+                    // Convert Windows path to Linux style for Docker
+                    def workspaceLinux = '/workspace'
+
+                    docker.image('golang:1.21').inside("-v ${env.WORKSPACE.replaceAll('\\\\','/')}:${workspaceLinux} -w ${workspaceLinux}") {
                         sh '''
-                        echo "Running backend unit tests inside Docker Linux container..."
+                        echo "Running Go tests inside Docker container..."
                         go version
                         go test -v ./...
                         '''
@@ -30,3 +26,4 @@ pipeline {
         }
     }
 }
+
