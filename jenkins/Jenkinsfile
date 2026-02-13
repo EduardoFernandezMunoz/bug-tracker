@@ -1,14 +1,15 @@
 pipeline {
     agent any
 
+    tools {
+        go 'Go' //
+    }
+
     stages {
         stage('Unit Tests - Backend') {
             steps {
-                // Change the path if your project is somewhere else
                 dir('bugtracker-backend') {
-                    // Check Go version first
                     bat 'go version'
-                    // Run tests
                     bat 'go test -v ./...'
                 }
             }
