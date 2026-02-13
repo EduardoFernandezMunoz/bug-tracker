@@ -10,8 +10,19 @@ pipeline {
         stage('Unit Tests - Backend') {
             steps {
                 dir('bugtracker-backend') {
+                    // Print Go version
                     bat 'go version'
-                    bat 'go test -v ./...'
+                    // Run tests and generate junit XML
+                    bat '''
+                        go test ./... -v > tmp.txt
+                        go-junit-report < tmp.txt > test-results.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Publish the junit results
+                    junit 'bugtracker-backend/test-results.xml'
                 }
             }
         }
@@ -32,3 +43,4 @@ pipeline {
         }
     }
 }
+
