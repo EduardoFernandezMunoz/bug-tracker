@@ -24,6 +24,11 @@ pipeline {
                     bat 'npm test'
                 }
             }
+            post {
+                always {
+                    junit 'bugtracker-frontend/test-results.xml'
+                }
+            }
         }
     }
 }
