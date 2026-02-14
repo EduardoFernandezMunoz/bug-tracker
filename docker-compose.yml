@@ -3,40 +3,27 @@ networks:
     driver: bridge
 
 services:
+  backend:
+    build:
+      context: ./bugtracker-backend
+    ports:
+      - "8081:8081"          # Puerto seguro en Windows
+    environment:
+      - PORT=8081
+      - GIN_MODE=release
+    networks:
+      - bugtracker
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./bugtracker-frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_API_URL=http://backend:8081
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - bugtracker
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  backend:
-    build:
-      context: ./bugtracker-backend
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/app/data
-    networks:
-      - bugtracker
-    healthcheck:
-      test: ["CMD", "wget", "-O", "-", "http://localhost:8080/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    restart: unless-stopped

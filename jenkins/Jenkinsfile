@@ -16,13 +16,13 @@ pipeline {
                             bat 'go version'
 
                             // Run tests and generate coverage
-                            bat 'go test -v ./... > test-results.txt'
-                            bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                            bat 'go tool cover -html=coverage.out -o coverage.html'
+                            bat 'go test -v ./... > test-results.txt' // Run unit tests with verbose output and save to test-results.txt
+                            bat 'go test -coverprofile=coverage.out -covermode=atomic ./...' // Generate coverage file; -covermode=atomic is safer and more reliable
+                            bat 'go tool cover -html=coverage.out -o coverage.html' // Convert coverage.out to HTML report
 
                             // Create reports folder and move coverage.html there
-                            bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage.html reports\\'
+                            bat 'if not exist reports mkdir reports' // Create reports folder if it doesn't exist
+                            bat 'move /Y coverage.html reports\\' // Move coverage.html to reports folder, /Y overwrites automatically
                         }
                     }
                     post {
@@ -44,16 +44,16 @@ pipeline {
                     steps {
                         dir('bugtracker-frontend') {
                             // Verify that Node and npm are available
-                            bat 'node -v'
-                            bat 'npm -v'
+                            bat 'node -v' // Show Node version
+                            bat 'npm -v'  // Show npm version
 
                             // Install dependencies and run tests
-                            bat 'npm ci'
-                            bat 'npm test'
+                            bat 'npm ci'   // Install dependencies according to package-lock.json
+                            bat 'npm test' // Run frontend unit tests
 
                             // Create reports folder and move coverage there
-                            bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage reports\\'
+                            bat 'if not exist reports mkdir reports' // Create reports folder if it doesn't exist
+                            bat 'move /Y coverage reports\\' // Move coverage folder to reports
                         }
                     }
                     post {
@@ -73,11 +73,27 @@ pipeline {
 
             } // end parallel
         }
+
+        // -------------------------------
+        // Launch Application stage (Windows-ready)
+        // -------------------------------
+        stage('Launch Application') {
+            steps {
+                dir("${WORKSPACE}") {
+                    // Start Docker containers for Windows
+                    bat 'docker-compose up -d' // Launch backend and frontend containers in detached mode
+                    
+                    // Optional: show running containers to verify everything is up
+                    bat 'docker ps'
+                }
+            }
+        }
+
     }
 
     post {
         always {
-            // Clean workspace at the end
+            // Clean workspace at the end of the pipeline
             cleanWs()
         }
     }
