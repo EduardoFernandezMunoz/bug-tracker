@@ -28,12 +28,12 @@ pipeline {
                             bat 'move /Y coverage.html reports\\'
 
                             // Convert test-results.txt to JUnit XML
-                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > test-results.xml'
+                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > reports/backend-test-results.xml'
                         }
                     }
                     post {
                         always {
-                            junit 'bugtracker-backend/test-results.xml'
+                            junit 'bugtracker-backend/reports/backend-test-results.xml'
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
@@ -54,6 +54,10 @@ pipeline {
 
                             // Install dependencies and run tests
                             bat 'npm ci'
+
+                            // Run Jest tests with JUnit reporter
+                            // Ensure jest-junit is configured in package.json:
+                            // "jest": { "reporters": [["default"], ["jest-junit", { "outputDirectory": "./reports", "outputName": "frontend-test-results.xml" }]] }
                             bat 'npm test'
 
                             // Create reports folder and move coverage
@@ -63,7 +67,7 @@ pipeline {
                     }
                     post {
                         always {
-                            junit 'bugtracker-frontend/reports/junit.xml'
+                            junit 'bugtracker-frontend/reports/frontend-test-results.xml'
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'index.html',
