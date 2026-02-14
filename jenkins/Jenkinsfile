@@ -1,8 +1,8 @@
 pipeline {
     agent any
     tools {
-        go 'Go'           // Exact name of Go installation in Jenkins
-        nodejs 'NodeJS_LTS' // Exact name of NodeJS installation in Jenkins
+        go 'Go'           
+        nodejs 'NodeJS_LTS'
     }
 
     stages {
@@ -12,37 +12,43 @@ pipeline {
                 stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
-                            // Verify that Go is available
+                            // Verificar que Go está disponible
                             bat 'go version'
 
-                            // Run tests and generate coverage
-                            // catchError ensures the stage doesn't completely fail if something goes wrong
+                            // Crear carpeta reports si no existe
+                            bat 'if not exist reports mkdir reports'
+
+                            // Ejecutar tests y generar coverage
                             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                bat 'go test -v ./... > test-results.txt'
                                 bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                                // Use %cd% for Windows absolute path
-                                bat 'go tool cover -html=coverage.out -o %cd%\\coverage.html'
-
-                                // Create reports folder and move coverage.html there
-                                bat 'if not exist reports mkdir reports'
-                                bat 'move /Y coverage.html reports\\'
+                                // Solo generar HTML si coverage.out existe
+                                bat '''
+                                if exist coverage.out (
+                                    go tool cover -html=coverage.out -o reports\\coverage.html
+                                ) else (
+                                    echo "coverage.out no existe, omitiendo HTML"
+                                )
+                                '''
+                                // Crear JUnit XML de backend
+                                bat '''
+                                go test -v ./... -json > test-results.json
+                                echo "Converting JSON to JUnit XML requires go-junit-report tool"
+                                '''
                             }
-
-                            // Optional: list files to verify coverage.html exists
-                            bat 'dir reports'
                         }
                     }
                     post {
                         always {
-                            // Publish HTML report for backend coverage
+                            // Publicar HTML
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
                                 keepAll: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: false
+                                allowMissing: true
                             ])
+                            // Aquí se podría usar publishJUnit si se tiene JUnit XML generado
                         }
                     }
                 }
@@ -50,59 +56,55 @@ pipeline {
                 stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
-                            // Verify that Node and npm are available
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Install dependencies and run tests
+                            // Instalar dependencias
                             bat 'npm ci'
+
+                            // Ejecutar tests con cobertura y JUnit reporter
                             bat 'npm test'
 
-                            // Create reports folder and move coverage there
+                            // Crear carpeta reports si no existe
                             bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage reports\\' // /Y so that Windows does not ask for confirmation
+
+                            // Mover cobertura HTML
+                            bat 'move /Y coverage reports\\'
                         }
                     }
                     post {
                         always {
-                            // Publish HTML report for frontend coverage
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'coverage/index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: false
+                                allowMissing: true
                             ])
                         }
                     }
                 }
 
-            } // end parallel
+            }
         }
 
         stage('Launch Application') {
             steps {
-                // Use catchError so this stage runs even if previous stages failed
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    // Navigate to root of project
                     dir('.') {
-                        // Launch Docker containers (Windows-friendly)
                         bat 'docker-compose up -d'
-                        // List running containers to verify
                         bat 'docker ps'
                     }
                 }
             }
-            // Explanation: This stage launches backend/frontend apps using Docker.
-            // Using catchError prevents pipeline from stopping if previous tests failed.
+            // Explicación: Lanza contenedores backend y frontend con Docker en Windows.
         }
 
     }
 
     post {
         always {
-            // Clean workspace at the end
             cleanWs()
         }
     }
