@@ -6,18 +6,6 @@ pipeline {
         nodejs 'NodeJS_LTS'    // Nombre exacto de NodeJS en Jenkins Global Tool Config
     }
 
-    environment {
-        BACKEND_PORT = "8082"   // Cambia el puerto del backend aquí
-        FRONTEND_PORT = "3001"  // Cambia el puerto del frontend aquí
-    }
-
-    stages {
-        stage('Checkout SCM') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Execute Unit Tests') {
             parallel {
 
