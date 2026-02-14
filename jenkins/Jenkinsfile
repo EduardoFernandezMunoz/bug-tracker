@@ -15,6 +15,9 @@ pipeline {
                         dir('bugtracker-backend') {
                             bat 'go version'
 
+                            // **Install go-junit-report**
+                            bat 'go install github.com/jstemmer/go-junit-report@latest'
+
                             // Run tests and generate coverage
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
@@ -88,13 +91,13 @@ pipeline {
                 docker {
                     image 'mcr.microsoft.com/playwright:v1.50.0-jammy'
                     reuseNode true
+                    args '-u 0 --network=host'
                 }
             }
             steps {
                 dir('tests-api') {
                     // Wait until API is ready (max 30s)
-                    // Use host.docker.internal on Windows to reach backend
-                    bat 'npx wait-port http://host.docker.internal:8080/api/health -t 30000'
+                    bat 'npx wait-port http://localhost:8080/api/health -t 30000'
 
                     // Install dependencies and run Playwright tests
                     bat 'npm ci'
@@ -117,13 +120,47 @@ pipeline {
             }
         }
 
+        // -----------------------------
+        // Add E2E Tests stage
+        // -----------------------------
+        stage('E2E Tests') {
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/playwright:v1.50.0-jammy'
+                    reuseNode true
+                    args '-u 0 --network=host'
+                }
+            }
+            steps {
+                dir('tests-e2e') {
+                    // Wait until frontend is ready
+                    bat 'npx wait-port http://localhost:3000 -t 30000'
+
+                    // Install dependencies and run E2E Playwright tests
+                    bat 'npm ci'
+                    bat 'npx playwright test'
+                }
+            }
+            post {
+                always {
+                    // Publish E2E Playwright HTML report
+                    publishHTML target: [
+                        reportDir: 'tests-e2e/playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright E2E Test Report',
+                        allowMissing: true
+                    ]
+                }
+            }
+        }
+
     } // end stages
 
     post {
         always {
             echo "Cleaning up workspace and Docker containers..."
             cleanWs()
-            bat 'docker-compose down'
+            bat 'docker-compose down || echo "No docker-compose file found, skipping cleanup"'
         }
     }
 }
