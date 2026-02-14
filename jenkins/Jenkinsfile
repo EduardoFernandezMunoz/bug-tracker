@@ -20,18 +20,18 @@ pipeline {
                             bat 'go install github.com/jstemmer/go-junit-report@latest'
 
                             // Ejecuta tests y genera cobertura
-                            bat 'go test -v ./... > test-results.txt'
+                            bat 'go test -v ./... > reports/test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o reports/coverage.html'
 
                             // Convierte test-results.txt a XML para Jenkins
-                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > reports/backend-test-results.xml'
+                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < reports/test-results.txt > reports/backend-test-results.xml'
                         }
                     }
                     post {
                         always {
                             junit 'bugtracker-backend/reports/backend-test-results.xml'
-                            publishHTML([
+                            publishHTML([ 
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
@@ -51,13 +51,13 @@ pipeline {
 
                             // Instala dependencias y ejecuta tests
                             bat 'npm ci'
-                            bat 'npm test'
+                            bat 'npm test -- --reporters=default --reporters=jest-junit'
                         }
                     }
                     post {
                         always {
                             junit 'bugtracker-frontend/reports/junit.xml'
-                            publishHTML([
+                            publishHTML([ 
                                 reportDir: 'bugtracker-frontend/reports/coverage',
                                 reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
@@ -75,7 +75,13 @@ pipeline {
         stage('Launch Applications') {
             steps {
                 echo "Launching backend and frontend apps with Docker..."
-                bat 'docker-compose up --build -d'
+                script {
+                    if (fileExists('docker-compose.yml')) {
+                        bat 'docker-compose up --build -d'
+                    } else {
+                        echo "No docker-compose.yml found, skipping launch"
+                    }
+                }
             }
         }
 
@@ -89,10 +95,7 @@ pipeline {
             }
             steps {
                 dir('tests-api') {
-                    // Espera a que la API esté lista
                     bat 'npx wait-port http://localhost:8080/api/health -t 30000'
-
-                    // Instala dependencias y ejecuta Playwright
                     bat 'npm ci'
                     bat 'npx playwright test'
                 }
@@ -120,10 +123,7 @@ pipeline {
             }
             steps {
                 dir('tests-e2e') {
-                    // Espera a que el frontend esté listo
                     bat 'npx wait-port http://localhost:3000 -t 30000'
-
-                    // Instala dependencias y ejecuta E2E Playwright
                     bat 'npm ci'
                     bat 'npx playwright test'
                 }
@@ -140,14 +140,34 @@ pipeline {
                 }
             }
         }
-
+                stage('Performance Tests') {
+            agent {
+                docker {
+                    image 'grafana/k6:latest'
+                    reuseNode true
+                    args '--network=host -u root --entrypoint=""'
+                }
+            }
+            steps {
+                dir('tests-perf') {
+                    // En Windows con Docker, usamos sh dentro del contenedor Linux
+                    bat 'docker run --rm -v "%cd%/tests-perf:/tests" -w /tests grafana/k6:latest run script.js'
+                }
+            }
+        }
     } // end stages
 
     post {
         always {
             echo "Cleaning up workspace and Docker containers..."
             cleanWs()
-            bat 'docker-compose down || echo "No docker-compose file found, skipping cleanup"'
+            script {
+                if (fileExists('docker-compose.yml')) {
+                    bat 'docker-compose down'
+                } else {
+                    echo "No docker-compose.yml found, skipping cleanup"
+                }
+            }
         }
     }
 }
