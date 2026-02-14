@@ -1,11 +1,23 @@
 pipeline {
     agent any
+
     tools {
-        go 'Go'                // Exact name in Jenkins Global Tool Config
-        nodejs 'NodeJS_LTS'    // Exact name in Jenkins Global Tool Config
+        go 'Go'                // Nombre exacto de Go en Jenkins Global Tool Config
+        nodejs 'NodeJS_LTS'    // Nombre exacto de NodeJS en Jenkins Global Tool Config
     }
 
-        stages {
+    environment {
+        BACKEND_PORT = "8082"   // Cambia el puerto del backend aquí
+        FRONTEND_PORT = "3001"  // Cambia el puerto del frontend aquí
+    }
+
+    stages {
+        stage('Checkout SCM') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Execute Unit Tests') {
             parallel {
 
@@ -14,16 +26,16 @@ pipeline {
                         dir('bugtracker-backend') {
                             bat 'go version'
 
-                            // Run tests and generate coverage
+                            // Ejecutar tests y generar cobertura
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o coverage.html'
 
-                            // Create reports folder and move coverage.html
+                            // Crear carpeta de reports y mover coverage
                             bat 'if not exist reports mkdir reports'
                             bat 'move /Y coverage.html reports\\'
 
-                            // Convert test-results.txt to JUnit XML using go-junit-report
+                            // Convertir test-results.txt a JUnit XML
                             bat 'go-junit-report < test-results.txt > test-results.xml'
                         }
                     }
@@ -48,13 +60,13 @@ pipeline {
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Install dependencies and run tests
+                            // Instalar dependencias y ejecutar tests
                             bat 'npm ci'
-                            bat 'npx playwright test --reporter=html,junit'  // generates coverage & JUnit XML
+                            bat 'npm test'
 
-                            // Create reports folder and move coverage
+                            // Crear carpeta de reports y mover coverage
                             bat 'if not exist reports mkdir reports'
-                            bat 'move /Y playwright-report reports\\'
+                            bat 'move /Y coverage reports\\'
                         }
                     }
                     post {
@@ -78,9 +90,9 @@ pipeline {
         stage('Launch Applications') {
             steps {
                 echo "Launching backend and frontend apps..."
-                // Start backend
+                // Ejecutar backend
                 bat "start cmd /c \"cd bugtracker-backend && npm start -- --port %BACKEND_PORT%\""
-                // Start frontend
+                // Ejecutar frontend
                 bat "start cmd /c \"cd bugtracker-frontend && npm start -- --port %FRONTEND_PORT%\""
             }
         }
