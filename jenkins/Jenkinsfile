@@ -21,11 +21,7 @@ pipeline {
                             // Run tests and generate coverage
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                            bat 'go tool cover -html=coverage.out -o coverage.html'
-
-                            // Create reports folder and move coverage
-                            bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage.html reports\\'
+                            bat 'go tool cover -html=coverage.out -o reports/coverage.html'
 
                             // Convert test-results.txt to JUnit XML
                             bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > reports/backend-test-results.xml'
@@ -55,21 +51,18 @@ pipeline {
                             // Install dependencies and run tests
                             bat 'npm ci'
 
-                            // Run Jest tests with JUnit reporter
-                            // Ensure jest-junit is configured in package.json:
-                            // "jest": { "reporters": [["default"], ["jest-junit", { "outputDirectory": "./reports", "outputName": "frontend-test-results.xml" }]] }
+                            // Run Jest with coverage and JUnit reporter
                             bat 'npm test'
-
-                            // Create reports folder and move coverage
-                            bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage reports\\'
                         }
                     }
                     post {
                         always {
-                            junit 'bugtracker-frontend/reports/frontend-test-results.xml'
+                            // Jenkins recoge el XML generado por jest-junit
+                            junit 'bugtracker-frontend/reports/junit.xml'
+
+                            // Publica el reporte de cobertura HTML generado por Jest
                             publishHTML([
-                                reportDir: 'bugtracker-frontend/reports',
+                                reportDir: 'bugtracker-frontend/reports/coverage',
                                 reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
@@ -110,10 +103,7 @@ pipeline {
             }
             post {
                 always {
-                    // Publish JUnit test results
                     junit 'tests-api/test-results/results.xml'
-
-                    // Publish Playwright HTML report
                     publishHTML target: [
                         reportDir: 'tests-api/playwright-report',
                         reportFiles: 'index.html',
@@ -144,7 +134,6 @@ pipeline {
             }
             post {
                 always {
-                    // Publish JUnit results and Playwright HTML report
                     junit 'tests-e2e/test-results/results.xml'
                     publishHTML target: [
                         reportDir: 'tests-e2e/playwright-report',
