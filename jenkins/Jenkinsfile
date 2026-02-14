@@ -1,105 +1,153 @@
 pipeline {
     agent any
 
-    environment {
-        GO111MODULE = 'on'
-        NODE_ENV = 'test'
-        REPORTS_DIR = 'reports'
+    tools {
+        go 'Go'                // Nombre exacto de Go en Jenkins Global Tool Config
+        nodejs 'NodeJS_LTS'    // Nombre exacto de NodeJS en Jenkins Global Tool Config
     }
 
     stages {
-        stage('Checkout SCM') {
-            steps {
-                checkout scm
-            }
-        }
 
-        stage('Tool Install') {
-            steps {
-                echo "Usando Go y Node instalados en el sistema"
-            }
-        }
-
-        stage('Prepare Reports Folder') {
-            steps {
-                bat "if not exist ${REPORTS_DIR} mkdir ${REPORTS_DIR}"
-            }
-        }
-
-        stage('Unit Tests') {
+        stage('Execute Unit Tests') {
             parallel {
-                stage('Backend Tests') {
+
+                stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
+                            bat 'go version'
+
+                            // Instala go-junit-report para convertir tests a JUnit
                             bat 'go install github.com/jstemmer/go-junit-report@latest'
-                            // Ejecutar tests y generar JUnit XML
-                            bat 'go test -v ./... | go-junit-report > ../reports/backend-tests.xml'
-                            // Generar cobertura
+
+                            // Ejecuta tests y genera cobertura
+                            bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                            bat 'go tool cover -html=coverage.out -o ../reports/coverage.html'
+                            bat 'go tool cover -html=coverage.out -o reports/coverage.html'
+
+                            // Convierte test-results.txt a XML para Jenkins
+                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > reports/backend-test-results.xml'
                         }
                     }
                     post {
                         always {
-                            junit 'reports/backend-tests.xml'
+                            junit 'bugtracker-backend/reports/backend-test-results.xml'
+                            publishHTML([
+                                reportDir: 'bugtracker-backend/reports',
+                                reportFiles: 'coverage.html',
+                                reportName: 'Backend Coverage Report',
+                                keepAll: true,
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true
+                            ])
                         }
                     }
                 }
 
-                stage('Frontend Tests') {
+                stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
-                            // Instalar dependencias
+                            bat 'node -v'
+                            bat 'npm -v'
+
+                            // Instala dependencias y ejecuta tests
                             bat 'npm ci'
-                            // Ejecutar tests con jest-junit
-                            bat 'npx jest --coverage --coverageReporters=html,text --reporters=default --reporters=jest-junit'
+                            bat 'npm test'
                         }
                     }
                     post {
                         always {
-                            junit 'reports/frontend-tests.xml'
+                            junit 'bugtracker-frontend/reports/junit.xml'
+                            publishHTML([
+                                reportDir: 'bugtracker-frontend/reports/coverage',
+                                reportFiles: 'index.html',
+                                reportName: 'Frontend Coverage Report',
+                                keepAll: true,
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true
+                            ])
                         }
                     }
                 }
-            }
+
+            } // end parallel
         }
 
-        stage('Launch Backend') {
+        stage('Launch Applications') {
             steps {
-                script {
-                    // Solo levantar backend para tests de API/E2E
-                    if(fileExists('docker-compose.yml')) {
-                        bat 'docker-compose up -d backend'
-                        bat 'timeout /t 5' // espera 5 segundos a que levante
-                    } else {
-                        echo "No docker-compose.yml found, skipping backend launch"
-                    }
-                }
+                echo "Launching backend and frontend apps with Docker..."
+                bat 'docker-compose up --build -d'
             }
         }
 
         stage('API Tests') {
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/playwright:v1.50.0-jammy'
+                    reuseNode true
+                    args '-u 0 --network=host'
+                }
+            }
             steps {
-                echo 'Aquí irían tus tests de API (si existen)'
+                dir('tests-api') {
+                    // Espera a que la API esté lista
+                    bat 'npx wait-port http://localhost:8080/api/health -t 30000'
+
+                    // Instala dependencias y ejecuta Playwright
+                    bat 'npm ci'
+                    bat 'npx playwright test'
+                }
+            }
+            post {
+                always {
+                    junit 'tests-api/test-results/results.xml'
+                    publishHTML target: [
+                        reportDir: 'tests-api/playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright API Test Report',
+                        allowMissing: true
+                    ]
+                }
             }
         }
 
         stage('E2E Tests') {
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/playwright:v1.50.0-jammy'
+                    reuseNode true
+                    args '-u 0 --network=host'
+                }
+            }
             steps {
-                echo 'Aquí irían tus tests E2E (si existen)'
+                dir('tests-e2e') {
+                    // Espera a que el frontend esté listo
+                    bat 'npx wait-port http://localhost:3000 -t 30000'
+
+                    // Instala dependencias y ejecuta E2E Playwright
+                    bat 'npm ci'
+                    bat 'npx playwright test'
+                }
+            }
+            post {
+                always {
+                    junit 'tests-e2e/test-results/results.xml'
+                    publishHTML target: [
+                        reportDir: 'tests-e2e/playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright E2E Test Report',
+                        allowMissing: true
+                    ]
+                }
             }
         }
-    }
+
+    } // end stages
 
     post {
         always {
-            echo 'Cleaning up workspace and Docker containers...'
+            echo "Cleaning up workspace and Docker containers..."
             cleanWs()
-            script {
-                if(fileExists('docker-compose.yml')) {
-                    bat 'docker-compose down || echo "No docker-compose file found, skipping cleanup"'
-                }
-            }
+            bat 'docker-compose down || echo "No docker-compose file found, skipping cleanup"'
         }
     }
 }
