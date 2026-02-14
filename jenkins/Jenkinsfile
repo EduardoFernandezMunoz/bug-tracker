@@ -1,24 +1,27 @@
 pipeline {
     agent any
+
     environment {
-        GO_HOME = 'C:\\Go\\go1.26.0'
-        NODE_HOME = 'C:\\Program Files\\nodejs'
-        PATH = "${env.GO_HOME}\\bin;${env.NODE_HOME};${env.PATH}"
+        // Keep Node in PATH (assuming installed globally)
+        PATH = "${tool 'NodeJS-25'}\\bin;${env.PATH}"  
     }
 
     stages {
         stage('Checkout SCM') {
             steps {
+                // Checkout the repository
                 checkout scm
             }
         }
 
         stage('Tool Install') {
             steps {
-                echo "Checking Go and Node versions..."
-                bat 'go version'
+                echo 'Checking Go and Node versions...'
+                // Temporarily add Go to PATH so Jenkins finds it
+                withEnv(["PATH=C:\\Go\\bin;${env.PATH}"]) {
+                    bat 'go version'
+                }
                 bat 'node -v'
-                bat 'npm -v'
             }
         }
 
@@ -26,65 +29,61 @@ pipeline {
             parallel {
                 stage('Unit Tests - Backend') {
                     steps {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            dir('bugtracker-backend') {
-                                echo "Freeing port 8081 if occupied..."
-                                bat """
-                                for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8081 ^| findstr LISTENING') do (
-                                    echo Port 8081 occupied by PID %%a, killing process...
-                                    taskkill /PID %%a /F || exit /b 0
-                                )
-                                if not exist reports mkdir reports
-                                go test -coverprofile=reports/coverage.out -covermode=atomic ./...
-                                """
+                        dir('bugtracker-backend') {
+                            echo 'Running backend unit tests...'
+                            withEnv(["PATH=C:\\Go\\bin;${env.PATH}"]) {
+                                bat 'go test ./... -v -coverprofile=reports/coverage.out'
                             }
-                            publishHTML(target: [
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'bugtracker-backend/reports',
-                                reportFiles: 'coverage.out',
-                                reportName: 'Backend Coverage Report'
-                            ])
                         }
                     }
                 }
-
                 stage('Unit Tests - Frontend') {
                     steps {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            dir('bugtracker-frontend') {
-                                bat 'if not exist reports mkdir reports'
-                                bat 'npm ci'
-                                bat 'npm test -- --coverage --coverageReporters=text-summary --coverageReporters=html'
-                                bat 'move /Y coverage reports\\'
-                            }
-                            publishHTML(target: [
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'bugtracker-frontend/reports',
-                                reportFiles: 'index.html',
-                                reportName: 'Frontend Coverage Report'
-                            ])
+                        dir('bugtracker-frontend') {
+                            echo 'Running frontend unit tests...'
+                            bat 'npm ci'
+                            bat 'npm test'
+                            bat 'if not exist reports mkdir reports'
+                            bat 'move /Y coverage reports\\'
                         }
                     }
                 }
             }
         }
 
+        stage('Publish Coverage Reports') {
+            steps {
+                // Backend coverage
+                publishHTML([
+                    allowMissing: true,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'bugtracker-backend/reports',
+                    reportFiles: 'index.html',
+                    reportName: 'Backend Coverage Report'
+                ])
+                // Frontend coverage
+                publishHTML([
+                    allowMissing: true,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'bugtracker-frontend/reports',
+                    reportFiles: 'index.html',
+                    reportName: 'Frontend Coverage Report'
+                ])
+            }
+        }
+
         stage('Launch Application') {
             steps {
-                echo "Launching application..."
-                // Aquí va tu comando para arrancar backend/frontend
-                // Ejemplo: bat 'go run main.go' o 'npm start'
+                echo 'Skipping launch stage in CI...'
             }
         }
     }
 
     post {
         always {
-            echo "Cleaning workspace..."
+            echo 'Cleaning workspace...'
             cleanWs()
         }
     }
