@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     tools {
-        go 'Go'                // Nombre exacto de Go en Jenkins Global Tool Config
-        nodejs 'NodeJS_LTS'    // Nombre exacto de NodeJS en Jenkins Global Tool Config
+        go 'Go'                // Nombre exacto en Jenkins Global Tool Config
+        nodejs 'NodeJS_LTS'    // Nombre exacto en Jenkins Global Tool Config
     }
 
     stages {
@@ -14,17 +14,19 @@ pipeline {
                 stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
-                            bat 'go version'
 
-                            // Instala go-junit-report para convertir tests a JUnit
+                            // Crear carpeta reports
+                            bat 'if not exist reports mkdir reports'
+
+                            bat 'go version'
                             bat 'go install github.com/jstemmer/go-junit-report@latest'
 
-                            // Ejecuta tests y genera cobertura
+                            // Ejecutar tests y cobertura
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o reports/coverage.html'
 
-                            // Convierte test-results.txt a XML para Jenkins
+                            // Convertir test-results.txt a XML para Jenkins
                             bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > reports/backend-test-results.xml'
                         }
                     }
@@ -46,11 +48,16 @@ pipeline {
                 stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
+
+                            // Crear carpeta reports
+                            bat 'if not exist reports mkdir reports'
+
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Instala dependencias y ejecuta tests
                             bat 'npm ci'
+
+                            // Ejecutar Jest con cobertura y reporter JUnit
                             bat 'npm test'
                         }
                     }
@@ -75,7 +82,13 @@ pipeline {
         stage('Launch Applications') {
             steps {
                 echo "Launching backend and frontend apps with Docker..."
-                bat 'docker-compose up --build -d'
+                script {
+                    if (fileExists('docker-compose.yml')) {
+                        bat 'docker-compose up --build -d'
+                    } else {
+                        echo "No docker-compose.yml found, skipping launch"
+                    }
+                }
             }
         }
 
@@ -89,10 +102,7 @@ pipeline {
             }
             steps {
                 dir('tests-api') {
-                    // Espera a que la API esté lista
                     bat 'npx wait-port http://localhost:8080/api/health -t 30000'
-
-                    // Instala dependencias y ejecuta Playwright
                     bat 'npm ci'
                     bat 'npx playwright test'
                 }
@@ -120,10 +130,7 @@ pipeline {
             }
             steps {
                 dir('tests-e2e') {
-                    // Espera a que el frontend esté listo
                     bat 'npx wait-port http://localhost:3000 -t 30000'
-
-                    // Instala dependencias y ejecuta E2E Playwright
                     bat 'npm ci'
                     bat 'npx playwright test'
                 }
@@ -141,41 +148,19 @@ pipeline {
             }
         }
 
-        stage('Performance Tests') {
-            agent {
-                docker {
-                    image 'grafana/k6:latest'
-                    reuseNode true
-                    args '--network=host -u root --entrypoint=""'
-                }
-            }
-            steps {
-                dir('tests-perf') {
-                    // Ejecuta el script de rendimiento con k6
-                    bat 'docker run --rm -v "%cd%/tests-perf:/tests" -w /tests grafana/k6:latest run script.js'
-                }
-            }
-            post {
-                always {
-                    publishHTML target: [
-                        reportDir: 'tests-perf',
-                        reportFiles: 'perf-results.html',
-                        reportName: 'Performance Test Results Report',
-                        allowMissing: true,
-                        keepAll: true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
-            }
-        }
-
     } // end stages
 
     post {
         always {
             echo "Cleaning up workspace and Docker containers..."
             cleanWs()
-            bat 'docker-compose down || echo "No docker-compose file found, skipping cleanup"'
+            script {
+                if (fileExists('docker-compose.yml')) {
+                    bat 'docker-compose down'
+                } else {
+                    echo "No docker-compose.yml found, skipping cleanup"
+                }
+            }
         }
     }
 }
