@@ -53,12 +53,21 @@ pipeline {
 
         stage('Publish HTML Reports') {
             steps {
+                // Backend report
                 publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
                     reportDir: 'bugtracker-backend/reports',
                     reportFiles: 'index.html',
                     reportName: 'Backend Coverage Report'
                 ])
+
+                // Frontend report
                 publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
                     reportDir: 'bugtracker-frontend/reports',
                     reportFiles: 'index.html',
                     reportName: 'Frontend Coverage Report'
@@ -69,7 +78,7 @@ pipeline {
         stage('Launch Application') {
             steps {
                 echo 'Launching application...'
-                bat 'start bugtracker-backend\\start-backend.bat'  // asegúrate de que tu script use el puerto 8082
+                bat 'start bugtracker-backend\\start-backend.bat'  // asegúrate que use puerto 8082
                 bat 'start bugtracker-frontend\\start-frontend.bat'
             }
         }
