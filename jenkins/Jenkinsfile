@@ -15,7 +15,7 @@ pipeline {
                         dir('bugtracker-backend') {
                             bat 'go version'
 
-                            // **Install go-junit-report**
+                            // Install go-junit-report to convert Go tests to JUnit
                             bat 'go install github.com/jstemmer/go-junit-report@latest'
 
                             // Run tests and generate coverage
@@ -28,7 +28,7 @@ pipeline {
                             bat 'move /Y coverage.html reports\\'
 
                             // Convert test-results.txt to JUnit XML
-                            bat 'go-junit-report < test-results.txt > test-results.xml'
+                            bat '%USERPROFILE%\\go\\bin\\go-junit-report < test-results.txt > test-results.xml'
                         }
                     }
                     post {
@@ -39,8 +39,8 @@ pipeline {
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true
                             ])
                         }
                     }
@@ -69,8 +69,8 @@ pipeline {
                                 reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true
                             ])
                         }
                     }
@@ -120,9 +120,6 @@ pipeline {
             }
         }
 
-        // -----------------------------
-        // Add E2E Tests stage
-        // -----------------------------
         stage('E2E Tests') {
             agent {
                 docker {
@@ -143,7 +140,8 @@ pipeline {
             }
             post {
                 always {
-                    // Publish E2E Playwright HTML report
+                    // Publish JUnit results and Playwright HTML report
+                    junit 'tests-e2e/test-results/results.xml'
                     publishHTML target: [
                         reportDir: 'tests-e2e/playwright-report',
                         reportFiles: 'index.html',
