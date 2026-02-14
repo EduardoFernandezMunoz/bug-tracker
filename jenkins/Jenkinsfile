@@ -36,7 +36,8 @@ pipeline {
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true
+                                alwaysLinkToLastBuild: true,
+                                allowMissing: true
                             ])
                         }
                     }
@@ -65,7 +66,8 @@ pipeline {
                                 reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true
+                                alwaysLinkToLastBuild: true,
+                                allowMissing: true
                             ])
                         }
                     }
@@ -108,7 +110,8 @@ pipeline {
                     publishHTML target: [
                         reportDir: 'tests-api/playwright-report',
                         reportFiles: 'index.html',
-                        reportName: 'Playwright API Test Report'
+                        reportName: 'Playwright API Test Report',
+                        allowMissing: true
                     ]
                 }
             }
