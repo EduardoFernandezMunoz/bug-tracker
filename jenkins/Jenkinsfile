@@ -2,10 +2,11 @@ pipeline {
     agent any
 
     tools {
-        go 'Go'                // Nombre exacto de Go en Jenkins Global Tool Config
-        nodejs 'NodeJS_LTS'    // Nombre exacto de NodeJS en Jenkins Global Tool Config
+        go 'Go'                // Exact name of Go in Jenkins Global Tool Config
+        nodejs 'NodeJS_LTS'    // Exact name of NodeJS in Jenkins Global Tool Config
     }
 
+    stages {
         stage('Execute Unit Tests') {
             parallel {
 
@@ -14,16 +15,16 @@ pipeline {
                         dir('bugtracker-backend') {
                             bat 'go version'
 
-                            // Ejecutar tests y generar cobertura
+                            // Run tests and generate coverage
                             bat 'go test -v ./... > test-results.txt'
                             bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
                             bat 'go tool cover -html=coverage.out -o coverage.html'
 
-                            // Crear carpeta de reports y mover coverage
+                            // Create reports folder and move coverage
                             bat 'if not exist reports mkdir reports'
                             bat 'move /Y coverage.html reports\\'
 
-                            // Convertir test-results.txt a JUnit XML
+                            // Convert test-results.txt to JUnit XML
                             bat 'go-junit-report < test-results.txt > test-results.xml'
                         }
                     }
@@ -35,8 +36,7 @@ pipeline {
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true,
-                                allowMissing: false
+                                alwaysLinkToLastBuild: true
                             ])
                         }
                     }
@@ -48,11 +48,11 @@ pipeline {
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Instalar dependencias y ejecutar tests
+                            // Install dependencies and run tests
                             bat 'npm ci'
                             bat 'npm test'
 
-                            // Crear carpeta de reports y mover coverage
+                            // Create reports folder and move coverage
                             bat 'if not exist reports mkdir reports'
                             bat 'move /Y coverage reports\\'
                         }
@@ -65,8 +65,7 @@ pipeline {
                                 reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
-                                alwaysLinkToLastBuild: true,
-                                allowMissing: false
+                                alwaysLinkToLastBuild: true
                             ])
                         }
                     }
@@ -77,11 +76,41 @@ pipeline {
 
         stage('Launch Applications') {
             steps {
-                echo "Launching backend and frontend apps..."
-                // Ejecutar backend
-                bat "start cmd /c \"cd bugtracker-backend && npm start -- --port %BACKEND_PORT%\""
-                // Ejecutar frontend
-                bat "start cmd /c \"cd bugtracker-frontend && npm start -- --port %FRONTEND_PORT%\""
+                echo "Launching backend and frontend apps with Docker..."
+                bat 'docker-compose up --build -d'
+            }
+        }
+
+        stage('API Tests') {
+            agent {
+                docker {
+                    image 'mcr.microsoft.com/playwright:v1.50.0-jammy'
+                    reuseNode true
+                }
+            }
+            steps {
+                dir('tests-api') {
+                    // Wait until API is ready (max 30s)
+                    // Use host.docker.internal on Windows to reach backend
+                    bat 'npx wait-port http://host.docker.internal:8080/api/health -t 30000'
+
+                    // Install dependencies and run Playwright tests
+                    bat 'npm ci'
+                    bat 'npx playwright test'
+                }
+            }
+            post {
+                always {
+                    // Publish JUnit test results
+                    junit 'tests-api/test-results/results.xml'
+
+                    // Publish Playwright HTML report
+                    publishHTML target: [
+                        reportDir: 'tests-api/playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright API Test Report'
+                    ]
+                }
             }
         }
 
@@ -89,7 +118,9 @@ pipeline {
 
     post {
         always {
+            echo "Cleaning up workspace and Docker containers..."
             cleanWs()
+            bat 'docker-compose down'
         }
     }
 }
