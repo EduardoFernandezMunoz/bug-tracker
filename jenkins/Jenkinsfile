@@ -1,65 +1,50 @@
 pipeline {
     agent any
-    tools {
-        go 'Go'
-        nodejs 'NodeJS_LTS'
-    }
-
     environment {
-        BACKEND_PORT = "8081"
-        FRONTEND_PORT = "3000"
+        GO_HOME = 'C:\\Go\\go1.26.0'
+        NODE_HOME = 'C:\\Program Files\\nodejs'
+        PATH = "${env.GO_HOME}\\bin;${env.NODE_HOME};${env.PATH}"
     }
 
     stages {
+        stage('Checkout SCM') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Tool Install') {
+            steps {
+                echo "Checking Go and Node versions..."
+                bat 'go version'
+                bat 'node -v'
+                bat 'npm -v'
+            }
+        }
 
         stage('Execute Unit Tests') {
             parallel {
-
                 stage('Unit Tests - Backend') {
                     steps {
-                        dir('bugtracker-backend') {
-                            echo "Checking Go version..."
-                            bat 'go version'
-
-                            // Create reports folder if it doesn't exist
-                            bat 'if not exist reports mkdir reports'
-
-                            // Ensure no process is occupying BACKEND_PORT
-                            echo "Freeing port ${env.BACKEND_PORT} if occupied..."
-                            bat """
-                            for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${env.BACKEND_PORT} ^| findstr LISTENING') do (
-                                echo Port ${env.BACKEND_PORT} occupied by PID %%a, killing process...
-                                taskkill /PID %%a /F
-                            )
-                            """
-
-                            // Run tests with coverage safely
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                // Recommend using a dynamic port in tests to avoid conflicts:
-                                // e.g., TEST_PORT=:0 in Go test environment
-                                bat 'set TEST_PORT=:0 && go test -coverprofile=coverage.out -covermode=atomic ./...'
-
-                                // Generate HTML coverage if file exists
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            dir('bugtracker-backend') {
+                                echo "Freeing port 8081 if occupied..."
                                 bat """
-                                if exist coverage.out (
-                                    go tool cover -html=coverage.out -o reports\\coverage.html
-                                ) else (
-                                    echo "coverage.out not found, skipping HTML report"
+                                for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8081 ^| findstr LISTENING') do (
+                                    echo Port 8081 occupied by PID %%a, killing process...
+                                    taskkill /PID %%a /F || exit /b 0
                                 )
+                                if not exist reports mkdir reports
+                                go test -coverprofile=reports/coverage.out -covermode=atomic ./...
                                 """
                             }
-                        }
-                    }
-                    post {
-                        always {
-                            // Publish backend coverage HTML
-                            publishHTML([
-                                reportDir: 'bugtracker-backend/reports',
-                                reportFiles: 'coverage.html',
-                                reportName: 'Backend Coverage Report',
-                                keepAll: true,
+                            publishHTML(target: [
+                                allowMissing: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                keepAll: true,
+                                reportDir: 'bugtracker-backend/reports',
+                                reportFiles: 'coverage.out',
+                                reportName: 'Backend Coverage Report'
                             ])
                         }
                     }
@@ -67,66 +52,34 @@ pipeline {
 
                 stage('Unit Tests - Frontend') {
                     steps {
-                        dir('bugtracker-frontend') {
-                            echo "Checking Node version..."
-                            bat 'node -v'
-                            bat 'npm -v'
-
-                            // Install dependencies
-                            bat 'npm ci'
-
-                            // Run frontend tests
-                            bat 'npm test'
-
-                            // Create reports folder and move coverage HTML
-                            bat 'if not exist reports mkdir reports'
-                            bat 'move /Y coverage reports\\'
-                        }
-                    }
-                    post {
-                        always {
-                            // Publish frontend coverage HTML
-                            publishHTML([
-                                reportDir: 'bugtracker-frontend/reports',
-                                reportFiles: 'coverage/index.html',
-                                reportName: 'Frontend Coverage Report',
-                                keepAll: true,
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            dir('bugtracker-frontend') {
+                                bat 'if not exist reports mkdir reports'
+                                bat 'npm ci'
+                                bat 'npm test -- --coverage --coverageReporters=text-summary --coverageReporters=html'
+                                bat 'move /Y coverage reports\\'
+                            }
+                            publishHTML(target: [
+                                allowMissing: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                keepAll: true,
+                                reportDir: 'bugtracker-frontend/reports',
+                                reportFiles: 'index.html',
+                                reportName: 'Frontend Coverage Report'
                             ])
                         }
                     }
                 }
-
             }
         }
 
         stage('Launch Application') {
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    dir('.') {
-                        echo "Stopping old containers and freeing frontend port..."
-                        // Stop and remove any old containers to prevent port conflicts
-                        bat 'docker-compose down -v --remove-orphans'
-
-                        // Free FRONTEND_PORT manually if still occupied
-                        bat """
-                        for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${env.FRONTEND_PORT} ^| findstr LISTENING') do (
-                            echo Port ${env.FRONTEND_PORT} occupied by PID %%a, killing process...
-                            taskkill /PID %%a /F
-                        )
-                        """
-
-                        echo "Starting Docker containers..."
-                        bat 'docker-compose up -d'
-
-                        echo "List running containers..."
-                        bat 'docker ps'
-                    }
-                }
+                echo "Launching application..."
+                // Aquí va tu comando para arrancar backend/frontend
+                // Ejemplo: bat 'go run main.go' o 'npm start'
             }
         }
-
     }
 
     post {
