@@ -1,12 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        GO_HOME = 'C:\\Go\\bin'
-        NODE_HOME = 'C:\\Program Files\\nodejs'
-        PATH = "${env.GO_HOME};${env.NODE_HOME};${env.PATH}"
-    }
-
     stages {
         stage('Checkout SCM') {
             steps {
@@ -17,30 +11,31 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 echo 'Creating reports directories if missing...'
-                bat '''
+                bat """
                 if not exist bugtracker-backend\\reports mkdir bugtracker-backend\\reports
                 if not exist bugtracker-frontend\\reports mkdir bugtracker-frontend\\reports
-                '''
+                """
             }
         }
 
-        stage('Free Port 8081') {
+        stage('Free Port 8082') {
             steps {
-                echo 'Freeing port 8081 if occupied...'
-                bat '''
-                for /F "tokens=5" %%a in ('netstat -ano ^| findstr :8081 ^| findstr LISTENING') do (
-                    echo Killing PID %%a...
-                    taskkill /PID %%a /F > nul 2>&1
+                echo 'Freeing port 8082 if occupied...'
+                bat """
+                for /F "tokens=5" %a in ('netstat -ano ^| findstr :8082 ^| findstr LISTENING') do (
+                    echo Killing PID %a...
+                    taskkill /PID %a /F 1>nul 2>&1
                 )
-                '''
+                """
             }
         }
 
         stage('Unit Tests Backend') {
             steps {
                 dir('bugtracker-backend') {
-                    bat 'go version'
-                    bat 'go test ./... -coverprofile=reports/coverage.out || exit 0'
+                    bat 'if not exist reports mkdir reports || exit 0'
+                    bat 'npm ci'
+                    bat 'npm test'
                 }
             }
         }
@@ -48,11 +43,10 @@ pipeline {
         stage('Unit Tests Frontend') {
             steps {
                 dir('bugtracker-frontend') {
-                    bat 'node -v'
-                    bat 'npm -v'
-                    bat 'npm ci || exit 0'
-                    bat 'npm test || exit 0'
-                    bat 'move /Y coverage reports\\ > nul 2>&1'
+                    bat 'if not exist reports mkdir reports || exit 0'
+                    bat 'npm ci'
+                    bat 'npm test'
+                    bat 'move /Y coverage reports\\ || exit 0'
                 }
             }
         }
@@ -60,19 +54,13 @@ pipeline {
         stage('Publish HTML Reports') {
             steps {
                 publishHTML([
-                    allowMissing: true,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
                     reportDir: 'bugtracker-backend/reports',
-                    reportFiles: 'coverage.html',
+                    reportFiles: 'index.html',
                     reportName: 'Backend Coverage Report'
                 ])
                 publishHTML([
-                    allowMissing: true,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
                     reportDir: 'bugtracker-frontend/reports',
-                    reportFiles: 'coverage/index.html',
+                    reportFiles: 'index.html',
                     reportName: 'Frontend Coverage Report'
                 ])
             }
@@ -81,7 +69,8 @@ pipeline {
         stage('Launch Application') {
             steps {
                 echo 'Launching application...'
-                bat 'echo Application launch placeholder (adjust your start command)'
+                bat 'start bugtracker-backend\\start-backend.bat'  // asegúrate de que tu script use el puerto 8082
+                bat 'start bugtracker-frontend\\start-frontend.bat'
             }
         }
     }
