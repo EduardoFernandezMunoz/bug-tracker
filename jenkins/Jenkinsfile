@@ -1,45 +1,58 @@
 pipeline {
     agent any
     tools {
-        go 'Go'           
+        go 'Go'
         nodejs 'NodeJS_LTS'
     }
 
+    environment {
+        BACKEND_PORT = "8081"
+        FRONTEND_PORT = "3000"
+    }
+
     stages {
+
         stage('Execute Unit Tests') {
             parallel {
 
                 stage('Unit Tests - Backend') {
                     steps {
                         dir('bugtracker-backend') {
-                            // Verificar que Go está disponible
+                            echo "Checking Go version..."
                             bat 'go version'
 
-                            // Crear carpeta reports si no existe
+                            // Create reports folder if it doesn't exist
                             bat 'if not exist reports mkdir reports'
 
-                            // Ejecutar tests y generar coverage
+                            // Ensure no process is occupying BACKEND_PORT
+                            echo "Freeing port ${env.BACKEND_PORT} if occupied..."
+                            bat """
+                            for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${env.BACKEND_PORT} ^| findstr LISTENING') do (
+                                echo Port ${env.BACKEND_PORT} occupied by PID %%a, killing process...
+                                taskkill /PID %%a /F
+                            )
+                            """
+
+                            // Run tests with coverage safely
                             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                                // Solo generar HTML si coverage.out existe
-                                bat '''
+                                // Recommend using a dynamic port in tests to avoid conflicts:
+                                // e.g., TEST_PORT=:0 in Go test environment
+                                bat 'set TEST_PORT=:0 && go test -coverprofile=coverage.out -covermode=atomic ./...'
+
+                                // Generate HTML coverage if file exists
+                                bat """
                                 if exist coverage.out (
                                     go tool cover -html=coverage.out -o reports\\coverage.html
                                 ) else (
-                                    echo "coverage.out no existe, omitiendo HTML"
+                                    echo "coverage.out not found, skipping HTML report"
                                 )
-                                '''
-                                // Crear JUnit XML de backend
-                                bat '''
-                                go test -v ./... -json > test-results.json
-                                echo "Converting JSON to JUnit XML requires go-junit-report tool"
-                                '''
+                                """
                             }
                         }
                     }
                     post {
                         always {
-                            // Publicar HTML
+                            // Publish backend coverage HTML
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
@@ -48,7 +61,6 @@ pipeline {
                                 alwaysLinkToLastBuild: true,
                                 allowMissing: true
                             ])
-                            // Aquí se podría usar publishJUnit si se tiene JUnit XML generado
                         }
                     }
                 }
@@ -56,24 +68,24 @@ pipeline {
                 stage('Unit Tests - Frontend') {
                     steps {
                         dir('bugtracker-frontend') {
+                            echo "Checking Node version..."
                             bat 'node -v'
                             bat 'npm -v'
 
-                            // Instalar dependencias
+                            // Install dependencies
                             bat 'npm ci'
 
-                            // Ejecutar tests con cobertura y JUnit reporter
+                            // Run frontend tests
                             bat 'npm test'
 
-                            // Crear carpeta reports si no existe
+                            // Create reports folder and move coverage HTML
                             bat 'if not exist reports mkdir reports'
-
-                            // Mover cobertura HTML
                             bat 'move /Y coverage reports\\'
                         }
                     }
                     post {
                         always {
+                            // Publish frontend coverage HTML
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
                                 reportFiles: 'coverage/index.html',
@@ -93,18 +105,33 @@ pipeline {
             steps {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                     dir('.') {
+                        echo "Stopping old containers and freeing frontend port..."
+                        // Stop and remove any old containers to prevent port conflicts
+                        bat 'docker-compose down -v --remove-orphans'
+
+                        // Free FRONTEND_PORT manually if still occupied
+                        bat """
+                        for /f "tokens=5" %%a in ('netstat -ano ^| findstr :${env.FRONTEND_PORT} ^| findstr LISTENING') do (
+                            echo Port ${env.FRONTEND_PORT} occupied by PID %%a, killing process...
+                            taskkill /PID %%a /F
+                        )
+                        """
+
+                        echo "Starting Docker containers..."
                         bat 'docker-compose up -d'
+
+                        echo "List running containers..."
                         bat 'docker ps'
                     }
                 }
             }
-            // Explicación: Lanza contenedores backend y frontend con Docker en Windows.
         }
 
     }
 
     post {
         always {
+            echo "Cleaning workspace..."
             cleanWs()
         }
     }
