@@ -1,11 +1,11 @@
 pipeline {
     agent any
     tools {
-        go 'Go'
-        nodejs 'NodeJS_LTS'
+        go 'Go'                // Exact name in Jenkins Global Tool Config
+        nodejs 'NodeJS_LTS'    // Exact name in Jenkins Global Tool Config
     }
 
-    stages {
+        stages {
         stage('Execute Unit Tests') {
             parallel {
 
@@ -14,46 +14,30 @@ pipeline {
                         dir('bugtracker-backend') {
                             bat 'go version'
 
-                            // Liberar puerto 8081 si está ocupado
-                            echo 'Comprobando si el puerto 8081 está en uso...'
-                            bat '''
-                            for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8081 ^| findstr LISTENING') do (
-                                echo Puerto 8081 ocupado por PID %%a, matando proceso...
-                                taskkill /PID %%a /F
-                            )
-                            '''
+                            // Run tests and generate coverage
+                            bat 'go test -v ./... > test-results.txt'
+                            bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
+                            bat 'go tool cover -html=coverage.out -o coverage.html'
 
+                            // Create reports folder and move coverage.html
                             bat 'if not exist reports mkdir reports'
+                            bat 'move /Y coverage.html reports\\'
 
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                // Tests y coverage
-                                bat 'go test -coverprofile=coverage.out -covermode=atomic ./...'
-                                bat '''
-                                if exist coverage.out (
-                                    go tool cover -html=coverage.out -o reports\\coverage.html
-                                ) else (
-                                    echo "coverage.out no existe, omitiendo HTML"
-                                )
-                                '''
-                                // JUnit XML
-                                bat '''
-                                go test -v ./... -json > test-results.json
-                                go-junit-report < test-results.json > reports/backend-tests.xml
-                                '''
-                            }
+                            // Convert test-results.txt to JUnit XML using go-junit-report
+                            bat 'go-junit-report < test-results.txt > test-results.xml'
                         }
                     }
                     post {
                         always {
+                            junit 'bugtracker-backend/test-results.xml'
                             publishHTML([
                                 reportDir: 'bugtracker-backend/reports',
                                 reportFiles: 'coverage.html',
                                 reportName: 'Backend Coverage Report',
                                 keepAll: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                allowMissing: false
                             ])
-                            publishJUnit('bugtracker-backend/reports/backend-tests.xml')
                         }
                     }
                 }
@@ -63,41 +47,45 @@ pipeline {
                         dir('bugtracker-frontend') {
                             bat 'node -v'
                             bat 'npm -v'
+
+                            // Install dependencies and run tests
                             bat 'npm ci'
-                            bat 'npm test'
+                            bat 'npx playwright test --reporter=html,junit'  // generates coverage & JUnit XML
+
+                            // Create reports folder and move coverage
                             bat 'if not exist reports mkdir reports'
-                            bat 'if exist coverage move /Y coverage reports\\'
+                            bat 'move /Y playwright-report reports\\'
                         }
                     }
                     post {
                         always {
+                            junit 'bugtracker-frontend/reports/junit.xml'
                             publishHTML([
                                 reportDir: 'bugtracker-frontend/reports',
-                                reportFiles: 'coverage/index.html',
+                                reportFiles: 'index.html',
                                 reportName: 'Frontend Coverage Report',
                                 keepAll: true,
                                 alwaysLinkToLastBuild: true,
-                                allowMissing: true
+                                allowMissing: false
                             ])
                         }
                     }
                 }
 
-            }
+            } // end parallel
         }
 
-        stage('Launch Application') {
+        stage('Launch Applications') {
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    dir('.') {
-                        bat 'docker-compose up -d'
-                        bat 'docker ps'
-                    }
-                }
+                echo "Launching backend and frontend apps..."
+                // Start backend
+                bat "start cmd /c \"cd bugtracker-backend && npm start -- --port %BACKEND_PORT%\""
+                // Start frontend
+                bat "start cmd /c \"cd bugtracker-frontend && npm start -- --port %FRONTEND_PORT%\""
             }
         }
 
-    }
+    } // end stages
 
     post {
         always {
