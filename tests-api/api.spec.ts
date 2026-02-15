@@ -5,11 +5,13 @@ let testBugId: number;
 test("Call Health Check", async ({ request }) => {
   console.log("Starting test...");
 
-  const healthCheckResponse = await request.get("health");
+  const healthCheckResponse = await request.get("/health");
   expect(healthCheckResponse.ok()).toBeTruthy();
-  expect(await healthCheckResponse.json()).toEqual(
+
+  const json = await healthCheckResponse.json();
+  expect(json).toEqual(
     expect.objectContaining({
-      status: "ok",
+      status: true,
     })
   );
 });
@@ -23,13 +25,10 @@ test("Create a bug", async ({ request }) => {
     priority: "Medium",
   };
 
-  const response = await request.post("bugs", {
-    data: newBug,
-  });
-
+  const response = await request.post("/bugs", { data: newBug });
   expect(response.ok()).toBeTruthy();
-  const bug = await response.json();
 
+  const bug = await response.json();
   testBugId = bug.id;
 
   expect(bug).toMatchObject({
@@ -52,13 +51,10 @@ test("Update a bug", async ({ request }) => {
     priority: "High",
   };
 
-  const response = await request.put(`bugs/${testBugId}`, {
-    data: updatedBug,
-  });
-
+  const response = await request.put(`/bugs/${testBugId}`, { data: updatedBug }); // ✅ /
   expect(response.ok()).toBeTruthy();
-  const bug = await response.json();
 
+  const bug = await response.json();
   expect(bug).toMatchObject({
     id: testBugId,
     title: updatedBug.title,
@@ -71,7 +67,7 @@ test("Update a bug", async ({ request }) => {
 });
 
 test("Get a specific bug", async ({ request }) => {
-  const response = await request.get(`bugs/${testBugId}`);
+  const response = await request.get(`/bugs/${testBugId}`); // ✅ /
 
   expect(response.ok()).toBeTruthy();
   const bug = await response.json();
@@ -89,9 +85,9 @@ test("Get a specific bug", async ({ request }) => {
 });
 
 test("Delete a bug", async ({ request }) => {
-  const deleteResponse = await request.delete(`bugs/${testBugId}`);
+  const deleteResponse = await request.delete(`/bugs/${testBugId}`); // ✅ /
   expect(deleteResponse.ok()).toBeTruthy();
 
-  const getResponse = await request.get(`bugs/${testBugId}`);
+  const getResponse = await request.get(`/bugs/${testBugId}`);
   expect(getResponse.status()).toBe(404);
 });
