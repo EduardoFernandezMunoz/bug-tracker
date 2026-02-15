@@ -129,4 +129,4 @@ jobs:
       - name: Launch application
         run: |
           docker-compose up --build -d
-          npx wait-port localhost:8081 -t 30000
+          npx wait-port localhost:8080 -t 30000
