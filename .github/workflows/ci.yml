@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-
   pull_request:
     branches:
       - main
@@ -31,6 +30,7 @@ jobs:
         id: test-backend
         working-directory: ./bugtracker-backend
         run: |
+          # Coverage creation
           go test -json -coverprofile=coverage.out -covermode=atomic ./...
           go tool cover -func=coverage.out > coverage.txt
 
@@ -39,10 +39,12 @@ jobs:
           cat coverage.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+          # Define output for PR comment
           echo "report<<EOF" >> $GITHUB_OUTPUT
-          cat coverage.text >> $GITHUB_OUTPUT
+          cat coverage.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+          # Run tests and generate JUnit XML
           go test -v ./... 2>&1 | go-junit-report > test-results.xml
 
       - name: Publish Backend test results
@@ -52,8 +54,9 @@ jobs:
           name: Backend Unit Tests Report
           path: bugtracker-backend/test-results.xml
           reporter: jest-junit
-  
+
   unit-tests-frontend:
+    needs: unit-tests-backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,8 +86,8 @@ jobs:
           name: Frontend Unit Tests Report
           path: bugtracker-frontend/test-results.xml
           reporter: jest-junit
-  
-  Create-coverage-comment:
+
+  create-coverage-comment:
     if: github.event_name == 'pull_request'
     needs: [unit-tests-backend]
     runs-on: ubuntu-latest
@@ -94,7 +97,7 @@ jobs:
       - name: Create Backend Coverage Comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: ${{ github.event.pull_resquest.number }}
+          issue-number: ${{ github.event.pull_request.number }}
           body: |
             ## Backend Test Coverage Report
             ```
